@@ -108,11 +108,101 @@ export const authAPI = {
   register: (data: RegisterRequest) => api.post('/auth/register', data),
 };
 
+// Dummy sweets data for demo
+const DUMMY_SWEETS: Sweet[] = [
+  {
+    id: '1',
+    name: 'Chocolate Truffle',
+    category: 'Chocolate',
+    price: 12.99,
+    quantity: 25,
+    description: 'Rich dark chocolate truffles with cocoa powder',
+    imageUrl: 'https://images.unsplash.com/photo-1511911063821-19f4a75bf5dd?w=400&h=300&fit=crop'
+  },
+  {
+    id: '2',
+    name: 'Strawberry Cake',
+    category: 'Cake',
+    price: 24.99,
+    quantity: 8,
+    description: 'Fresh strawberry layer cake with cream frosting',
+    imageUrl: 'https://images.unsplash.com/photo-1464347744102-11db6282f854?w=400&h=300&fit=crop'
+  },
+  {
+    id: '3',
+    name: 'Rainbow Macarons',
+    category: 'Macaron',
+    price: 18.50,
+    quantity: 15,
+    description: 'Colorful French macarons with various flavors',
+    imageUrl: 'https://images.unsplash.com/photo-1571115764595-644a1f56a55c?w=400&h=300&fit=crop'
+  },
+  {
+    id: '4',
+    name: 'Vanilla Cupcakes',
+    category: 'Cupcake',
+    price: 8.99,
+    quantity: 30,
+    description: 'Classic vanilla cupcakes with buttercream frosting',
+    imageUrl: 'https://images.unsplash.com/photo-1486427944299-d1955d23e34d?w=400&h=300&fit=crop'
+  },
+  {
+    id: '5',
+    name: 'Chocolate Cookies',
+    category: 'Cookie',
+    price: 6.50,
+    quantity: 0,
+    description: 'Chewy chocolate chip cookies - Out of stock!',
+    imageUrl: 'https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=400&h=300&fit=crop'
+  },
+  {
+    id: '6',
+    name: 'Lemon Tart',
+    category: 'Tart',
+    price: 15.75,
+    quantity: 12,
+    description: 'Tangy lemon curd tart with pastry crust',
+    imageUrl: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=400&h=300&fit=crop'
+  }
+];
+
 // Sweets API
 export const sweetsAPI = {
-  getAll: () => api.get<Sweet[]>('/sweets'),
-  search: (params: { name?: string; category?: string; minPrice?: number; maxPrice?: number }) =>
-    api.get<Sweet[]>('/sweets/search', { params }),
+  getAll: async () => {
+    try {
+      return await api.get<Sweet[]>('/sweets');
+    } catch (error) {
+      // Return dummy data if backend is not available
+      return Promise.resolve({ data: DUMMY_SWEETS });
+    }
+  },
+  search: async (params: { name?: string; category?: string; minPrice?: number; maxPrice?: number }) => {
+    try {
+      return await api.get<Sweet[]>('/sweets/search', { params });
+    } catch (error) {
+      // Filter dummy data based on search params
+      let filtered = DUMMY_SWEETS;
+      
+      if (params.name) {
+        filtered = filtered.filter(sweet => 
+          sweet.name.toLowerCase().includes(params.name!.toLowerCase())
+        );
+      }
+      if (params.category) {
+        filtered = filtered.filter(sweet => 
+          sweet.category.toLowerCase() === params.category!.toLowerCase()
+        );
+      }
+      if (params.minPrice !== undefined) {
+        filtered = filtered.filter(sweet => sweet.price >= params.minPrice!);
+      }
+      if (params.maxPrice !== undefined) {
+        filtered = filtered.filter(sweet => sweet.price <= params.maxPrice!);
+      }
+      
+      return Promise.resolve({ data: filtered });
+    }
+  },
   create: (data: Omit<Sweet, 'id'>) => api.post<Sweet>('/sweets', data),
   update: (id: string, data: Partial<Sweet>) => api.put<Sweet>(`/sweets/${id}`, data),
   delete: (id: string) => api.delete(`/sweets/${id}`),
