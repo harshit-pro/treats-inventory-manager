@@ -60,9 +60,51 @@ export interface RegisterRequest {
   password: string;
 }
 
+// Dummy credentials for testing
+const DUMMY_CREDENTIALS = [
+  {
+    username: 'admin',
+    password: 'admin123',
+    user: {
+      id: '1',
+      username: 'admin',
+      email: 'admin@sweetshop.com',
+      role: 'ADMIN' as const
+    }
+  },
+  {
+    username: 'user',
+    password: 'user123',
+    user: {
+      id: '2',
+      username: 'user',
+      email: 'user@sweetshop.com',
+      role: 'USER' as const
+    }
+  }
+];
+
 // Auth API
 export const authAPI = {
-  login: (data: LoginRequest) => api.post('/auth/login', data),
+  login: async (data: LoginRequest) => {
+    // Check dummy credentials first
+    const dummyUser = DUMMY_CREDENTIALS.find(
+      cred => cred.username === data.username && cred.password === data.password
+    );
+    
+    if (dummyUser) {
+      // Return dummy response matching backend format
+      return Promise.resolve({
+        data: {
+          token: `dummy-jwt-token-${dummyUser.user.id}`,
+          user: dummyUser.user
+        }
+      });
+    }
+    
+    // If not dummy credentials, try actual API
+    return api.post('/auth/login', data);
+  },
   register: (data: RegisterRequest) => api.post('/auth/register', data),
 };
 
