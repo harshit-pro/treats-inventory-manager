@@ -7,9 +7,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Sweet, sweetsAPI } from '@/lib/api';
+// Using backend multipart upload; Cloudinary upload not required here
 import SweetCard from '@/components/sweets/SweetCard';
-import Header from '@/components/layout/Header';
 import { ArrowLeft, Plus, Package, TrendingUp, DollarSign, Archive } from 'lucide-react';
+import { formatINR } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -43,7 +44,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: sweets = [] } = useQuery({
+  const { data: sweets = [], isLoading, error } = useQuery({
     queryKey: ['sweets'],
     queryFn: async () => {
       const response = await sweetsAPI.getAll();
@@ -74,7 +75,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
   // Update sweet mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Sweet> }) => 
+    mutationFn: ({ id, data }: { id: string; data: Partial<Sweet> }) =>
       sweetsAPI.update(id, data),
     onSuccess: () => {
       toast({
@@ -148,7 +149,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
   const SweetForm = ({ sweet, onSubmit, onCancel }: {
     sweet?: Sweet | null;
-    onSubmit: (data: Omit<Sweet, 'id'>) => void;
+    onSubmit: (data: Omit<Sweet, 'id'> & { imageFile?: File }) => void;
     onCancel: () => void;
   }) => {
     const [formData, setFormData] = useState({
@@ -159,10 +160,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       description: sweet?.description || '',
       imageUrl: sweet?.imageUrl || '',
     });
+    const [imageFile, setImageFile] = useState<File | undefined>(undefined);
 
     const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
-      onSubmit(formData);
+      onSubmit({ ...formData, imageFile });
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setImageFile(file);
+      // Optional preview
+      const url = URL.createObjectURL(file);
+      setFormData(prev => ({ ...prev, imageUrl: url }));
     };
 
     return (
@@ -189,7 +200,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="price">Price ($)</Label>
+            <Label htmlFor="price">Price (₹)</Label>
             <Input
               id="price"
               type="number"
@@ -221,6 +232,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             onChange={(e) => setFormData(prev => ({ ...prev, imageUrl: e.target.value }))}
             placeholder="https://example.com/image.jpg"
           />
+          <div className="flex items-center gap-2">
+            <Input type="file" accept="image/*" onChange={handleFileChange} />
+            {formData.imageUrl && (
+              <a href={formData.imageUrl} target="_blank" rel="noreferrer" className="text-xs text-primary underline">
+                Preview
+              </a>
+            )}
+          </div>
         </div>
         <div className="space-y-2">
           <Label htmlFor="description">Description (Optional)</Label>
@@ -246,8 +265,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-      
+
       <main className="container mx-auto px-4 py-8">
         <div className="flex items-center gap-4 mb-8">
           <Button variant="outline" onClick={onBack}>
@@ -273,19 +291,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="shadow-card">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Value</p>
-                  <p className="text-2xl font-bold">${stats.totalValue.toFixed(2)}</p>
+                  <p className="text-2xl font-bold">{formatINR(stats.totalValue)}</p>
                 </div>
                 <DollarSign className="h-8 w-8 text-success" />
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="shadow-card">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -297,7 +315,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="shadow-card">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -328,7 +346,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </DialogDescription>
               </DialogHeader>
               <SweetForm
-                onSubmit={(data) => createMutation.mutate(data)}
+                onSubmit={(data) => {
+                  if (!data.imageFile) {
+                    toast({
+                      title: 'Image required',
+                      description: 'Please select an image to upload',
+                      variant: 'destructive',
+                    });
+                    return;
+                  }
+                  createMutation.mutate(data as any);
+                }}
                 onCancel={() => setIsCreateOpen(false)}
               />
             </DialogContent>
@@ -336,15 +364,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         </div>
 
         {/* Sweets Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {sweets.map((sweet) => (
-            <SweetCard
-              key={sweet.id}
-              sweet={sweet}
-              onEdit={setEditingSweet}
-              onDelete={setDeletingSweet}
-            />
-          ))}
+        <div>
+          {isLoading ? (
+            <p>Loading sweets...</p>
+          ) : error ? (
+            <p className="text-destructive">Error fetching sweets. Check the console for details.</p>
+          ) : sweets.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {sweets.map((sweet) => (
+                <SweetCard
+                  key={sweet.id}
+                  sweet={sweet}
+                  onEdit={setEditingSweet}
+                  onDelete={setDeletingSweet}
+                />
+              ))}
+            </div>
+          ) : (
+            <p>No sweets found.</p>
+          )}
         </div>
 
         {/* Edit Dialog */}

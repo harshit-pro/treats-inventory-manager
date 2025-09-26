@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { authAPI, LoginRequest } from '@/lib/api';
+import { authAPI, LoginRequest, User } from '@/lib/api';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
 
 const LoginForm = () => {
@@ -23,13 +23,75 @@ const LoginForm = () => {
 
   const loginMutation = useMutation({
     mutationFn: authAPI.login,
-    onSuccess: (response) => {
-      const { token, user } = response.data;
-      login(token, user);
+    onSuccess: (response: any) => {
+      const payload = response?.data ?? {};
+      const nested = payload?.data ?? {};
+
+      const token: string | undefined =
+        payload.token || payload.jwt || payload.accessToken || nested.token || nested.jwt || nested.accessToken;
+
+      const rawUser: any =
+        payload.user || nested.user || payload.account || payload.profile || nested.account || nested.profile;
+
+      // Normalize user shape to our expected User type
+      const normalizedRoleRaw = (rawUser?.role ?? rawUser?.authorities?.[0]?.authority ?? '').toString();
+      const normalizedRole = normalizedRoleRaw === 'ROLE_ADMIN' ? 'ADMIN' : normalizedRoleRaw === 'ROLE_USER' ? 'USER' : normalizedRoleRaw;
+
+      let normalizedUser: User | null = rawUser
+        ? {
+          id: (rawUser.id ?? rawUser.userId ?? rawUser._id ?? '').toString(),
+          username: rawUser.username ?? rawUser.name ?? (rawUser.email ? String(rawUser.email).split('@')[0] : 'user'),
+          email: rawUser.email ?? '',
+          role: normalizedRole === 'ADMIN' ? 'ADMIN' : 'USER',
+        }
+        : null;
+
+      // If backend returned only token (your case), derive user from JWT and form input
+      if (token && !normalizedUser) {
+        try {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            const payloadStr = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+            const jwtPayload = JSON.parse(decodeURIComponent(escape(payloadStr)));
+            const roles: string[] = jwtPayload.roles || jwtPayload.authorities || [];
+            const isAdmin = roles.includes('ADMIN') || roles.includes('ROLE_ADMIN');
+            normalizedUser = {
+              id: jwtPayload.sub || jwtPayload.userId || 'me',
+              username: formData.username,
+              email: jwtPayload.email || '',
+              role: isAdmin ? 'ADMIN' : 'USER',
+            };
+          }
+        } catch (_) {
+          console.log('Error decoding JWT', _);
+          // ignore decode errors; will fall back to error toast below
+        }
+      }
+
+      // Final fallback: if we have a token but still no user, assume basic USER role
+      if (token && !normalizedUser) {
+        normalizedUser = {
+          id: 'me',
+          username: formData.username,
+          email: '',
+          role: 'USER',
+        };
+      }
+
+      if (!token || !normalizedUser) {
+        toast({
+          title: 'Login succeeded but response was unexpected',
+          description: 'Could not extract user session from server response',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      login(token, normalizedUser);
       toast({
-        title: "Welcome back!",
-        description: "Successfully logged in to Sweet Shop",
-        className: "bg-success text-success-foreground",
+        title: 'Welcome back!',
+        description: 'Successfully logged in to Sweet Shop',
+        className: 'bg-success text-success-foreground',
       });
       navigate('/dashboard');
     },

@@ -1,15 +1,9 @@
 import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:8080/api';
-
+const API_BASE_URL = 'http://localhost:8086/api';
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
-
 // Add auth token to requests
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('auth_token');
@@ -18,7 +12,6 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
-
 // Handle auth errors
 api.interceptors.response.use(
   (response) => response,
@@ -31,7 +24,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
 export interface Sweet {
   id: string;
   name: string;
@@ -41,7 +33,6 @@ export interface Sweet {
   description?: string;
   imageUrl?: string;
 }
-
 export interface User {
   id: string;
   username: string;
@@ -53,7 +44,6 @@ export interface LoginRequest {
   username: string;
   password: string;
 }
-
 export interface RegisterRequest {
   username: string;
   email: string;
@@ -91,125 +81,96 @@ export const authAPI = {
     const dummyUser = DUMMY_CREDENTIALS.find(
       cred => cred.username === data.username && cred.password === data.password
     );
-    
     if (dummyUser) {
-      // Return dummy response matching backend format
       return Promise.resolve({
         data: {
           token: `dummy-jwt-token-${dummyUser.user.id}`,
-          user: dummyUser.user
-        }
+          user: dummyUser.user,
+        },
       });
     }
-    
-    // If not dummy credentials, try actual API
-    return api.post('/auth/login', data);
+
+    // Try multiple endpoints and payload shapes to match various backends
+    const endpoints = ['/auth/login', '/login', '/auth/signin'];
+    const payloads: Array<Record<string, string>> = [
+      { username: data.username, password: data.password },
+      { email: data.username, password: data.password },
+      { userName: data.username, password: data.password },
+      { login: data.username, password: data.password },
+    ];
+
+    let lastError: any = null;
+    for (const endpoint of endpoints) {
+      for (const body of payloads) {
+        try {
+          return await api.post(endpoint, body);
+        } catch (error: any) {
+          lastError = error;
+          // If unauthorized or not found, continue trying other shapes/paths
+          const status = error?.response?.status;
+          if (status && ![400, 401, 404].includes(status)) {
+            // For other server errors, stop early
+            throw error;
+          }
+        }
+      }
+    }
+    throw lastError;
   },
   register: (data: RegisterRequest) => api.post('/auth/register', data),
 };
 
-// Dummy sweets data for demo
-const DUMMY_SWEETS: Sweet[] = [
-  {
-    id: '1',
-    name: 'Chocolate Truffle',
-    category: 'Chocolate',
-    price: 12.99,
-    quantity: 25,
-    description: 'Rich dark chocolate truffles with cocoa powder',
-    imageUrl: 'https://images.unsplash.com/photo-1511911063821-19f4a75bf5dd?w=400&h=300&fit=crop'
-  },
-  {
-    id: '2',
-    name: 'Strawberry Cake',
-    category: 'Cake',
-    price: 24.99,
-    quantity: 8,
-    description: 'Fresh strawberry layer cake with cream frosting',
-    imageUrl: 'https://images.unsplash.com/photo-1464347744102-11db6282f854?w=400&h=300&fit=crop'
-  },
-  {
-    id: '3',
-    name: 'Rainbow Macarons',
-    category: 'Macaron',
-    price: 18.50,
-    quantity: 15,
-    description: 'Colorful French macarons with various flavors',
-    imageUrl: 'https://images.unsplash.com/photo-1571115764595-644a1f56a55c?w=400&h=300&fit=crop'
-  },
-  {
-    id: '4',
-    name: 'Vanilla Cupcakes',
-    category: 'Cupcake',
-    price: 8.99,
-    quantity: 30,
-    description: 'Classic vanilla cupcakes with buttercream frosting',
-    imageUrl: 'https://images.unsplash.com/photo-1486427944299-d1955d23e34d?w=400&h=300&fit=crop'
-  },
-  {
-    id: '5',
-    name: 'Chocolate Cookies',
-    category: 'Cookie',
-    price: 6.50,
-    quantity: 0,
-    description: 'Chewy chocolate chip cookies - Out of stock!',
-    imageUrl: 'https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=400&h=300&fit=crop'
-  },
-  {
-    id: '6',
-    name: 'Lemon Tart',
-    category: 'Tart',
-    price: 15.75,
-    quantity: 12,
-    description: 'Tangy lemon curd tart with pastry crust',
-    imageUrl: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=400&h=300&fit=crop'
-  }
-];
-
+// Normalize backend sweet to frontend type (ensure id is string)
+function normalizeSweet(raw: any): Sweet {
+  return {
+    id: String(raw.id ?? raw.sweetId ?? ''),
+    name: raw.name,
+    category: raw.category,
+    price: Number(raw.price),
+    quantity: Number(raw.quantity),
+    description: raw.description ?? undefined,
+    // Be tolerant to different backend field names
+    imageUrl: (raw.imageUrl || raw.imageURL || raw.image || raw.imgUrl || raw.img || undefined),
+  };
+}
 // Sweets API
 export const sweetsAPI = {
   getAll: async () => {
-    try {
-      return await api.get<Sweet[]>('/sweets');
-    } catch (error) {
-      // Return dummy data if backend is not available
-      return Promise.resolve({ data: DUMMY_SWEETS });
-    }
+    const res = await api.get('/sweets/all');
+    console.log(res.data);
+    const data = Array.isArray(res.data) ? res.data.map(normalizeSweet) : [];
+    return { data } as { data: Sweet[] };
   },
   search: async (params: { name?: string; category?: string; minPrice?: number; maxPrice?: number }) => {
-    try {
-      return await api.get<Sweet[]>('/sweets/search', { params });
-    } catch (error) {
-      // Filter dummy data based on search params
-      let filtered = DUMMY_SWEETS;
-      
-      if (params.name) {
-        filtered = filtered.filter(sweet => 
-          sweet.name.toLowerCase().includes(params.name!.toLowerCase())
-        );
-      }
-      if (params.category) {
-        filtered = filtered.filter(sweet => 
-          sweet.category.toLowerCase() === params.category!.toLowerCase()
-        );
-      }
-      if (params.minPrice !== undefined) {
-        filtered = filtered.filter(sweet => sweet.price >= params.minPrice!);
-      }
-      if (params.maxPrice !== undefined) {
-        filtered = filtered.filter(sweet => sweet.price <= params.maxPrice!);
-      }
-      
-      return Promise.resolve({ data: filtered });
-    }
+    const res = await api.get('/sweets/search', { params });
+    const data = Array.isArray(res.data) ? res.data.map(normalizeSweet) : [];
+    return { data } as { data: Sweet[] };
   },
-  create: (data: Omit<Sweet, 'id'>) => api.post<Sweet>('/sweets', data),
-  update: (id: string, data: Partial<Sweet>) => api.put<Sweet>(`/sweets/${id}`, data),
-  delete: (id: string) => api.delete(`/sweets/${id}`),
-  purchase: (id: string, quantity: number = 1) => 
-    api.post(`/sweets/${id}/purchase`, { quantity }),
-  restock: (id: string, quantity: number) => 
-    api.post(`/sweets/${id}/restock`, { quantity }),
+  // create sweet with image using multipart/form-data: parts: sweet (json), image (file)
+  create: async (data: Omit<Sweet, 'id'> & { imageFile: File }) => {
+    const formData = new FormData();
+    formData.append('sweet', new Blob([
+      JSON.stringify({
+        name: data.name,
+        category: data.category,
+        price: data.price,
+        quantity: data.quantity,
+        description: data.description ?? '',
+        imageUrl: data.imageUrl ?? ''
+      })
+    ], { type: 'application/json' }));
+    formData.append('image', data.imageFile);
+    const res = await api.post('/sweets/add', formData);
+    return { data: normalizeSweet(res.data) } as { data: Sweet };
+  },
+  update: async (id: string, data: Partial<Sweet>) => {
+    const res = await api.put(`/sweets/update/${id}`, data);
+    return { data: normalizeSweet(res.data) } as { data: Sweet };
+  },
+  delete: (id: string) => api.delete(`/sweets/delete/${id}`),
+  purchase: (id: string, quantity: number = 1) =>
+    api.post(`/sweets/purchase/${id}`, { quantity }),
+  restock: (id: string, quantity: number) =>
+    api.post(`/sweets/restock/${id}`, { quantity }),
 };
-
 export default api;

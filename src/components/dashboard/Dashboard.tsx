@@ -6,11 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sweet, sweetsAPI } from '@/lib/api';
 import SweetCard from '@/components/sweets/SweetCard';
-import Header from '@/components/layout/Header';
 import AdminPanel from '@/components/admin/AdminPanel';
 import heroImage from '@/assets/hero-sweets.jpg';
 import { Search, Filter, Plus, Grid, List } from 'lucide-react';
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -19,12 +18,16 @@ import {
 } from '@/components/ui/select';
 
 const Dashboard = () => {
+
   const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [priceRange, setPriceRange] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showAdmin, setShowAdmin] = useState(false);
+
+
+
 
   const { data: sweets = [], isLoading, error } = useQuery({
     queryKey: ['sweets'],
@@ -44,29 +47,29 @@ const Dashboard = () => {
   const filteredSweets = useMemo(() => {
     return sweets.filter(sweet => {
       const matchesSearch = sweet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          sweet.category.toLowerCase().includes(searchTerm.toLowerCase());
-      
+        sweet.category.toLowerCase().includes(searchTerm.toLowerCase());
+
       const matchesCategory = selectedCategory === 'all' || sweet.category === selectedCategory;
-      
+
       let matchesPrice = true;
       if (priceRange !== 'all') {
-        const price = sweet.price;
+        const price = sweet.price; // assumed to be in INR
         switch (priceRange) {
-          case 'under-5':
-            matchesPrice = price < 5;
+          case 'under-5': // Under ₹500
+            matchesPrice = price < 500;
             break;
-          case '5-10':
-            matchesPrice = price >= 5 && price <= 10;
+          case '5-10': // ₹500 - ₹1,000
+            matchesPrice = price >= 500 && price <= 1000;
             break;
-          case '10-20':
-            matchesPrice = price >= 10 && price <= 20;
+          case '10-20': // ₹1,000 - ₹2,000
+            matchesPrice = price >= 1000 && price <= 2000;
             break;
-          case 'over-20':
-            matchesPrice = price > 20;
+          case 'over-20': // Over ₹2,000
+            matchesPrice = price > 2000;
             break;
         }
       }
-      
+
       return matchesSearch && matchesCategory && matchesPrice;
     });
   }, [sweets, searchTerm, selectedCategory, priceRange]);
@@ -76,13 +79,13 @@ const Dashboard = () => {
   }
 
   return (
+
     <div className="min-h-screen bg-background">
-      <Header />
-      
+
       {/* Hero Section */}
       <section className="relative h-80 overflow-hidden">
-        <img 
-          src={heroImage} 
+        <img
+          src={heroImage}
           alt="Premium Sweets Collection"
           className="w-full h-full object-cover"
         />
@@ -97,7 +100,7 @@ const Dashboard = () => {
                 Discover our premium collection of artisanal sweets, crafted with love and the finest ingredients.
               </p>
               {isAdmin && (
-                <Button 
+                <Button
                   onClick={() => setShowAdmin(true)}
                   className="bg-accent hover:bg-accent/90 text-accent-foreground animate-fade-in-up"
                 >
@@ -131,7 +134,7 @@ const Dashboard = () => {
                 <Filter className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Filters:</span>
               </div>
-              
+
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                 <SelectTrigger className="w-40 shadow-soft">
                   <SelectValue placeholder="Category" />
@@ -152,10 +155,10 @@ const Dashboard = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Prices</SelectItem>
-                  <SelectItem value="under-5">Under $5</SelectItem>
-                  <SelectItem value="5-10">$5 - $10</SelectItem>
-                  <SelectItem value="10-20">$10 - $20</SelectItem>
-                  <SelectItem value="over-20">Over $20</SelectItem>
+                  <SelectItem value="under-5">Under ₹500</SelectItem>
+                  <SelectItem value="5-10">₹500 - ₹1,000</SelectItem>
+                  <SelectItem value="10-20">₹1,000 - ₹2,000</SelectItem>
+                  <SelectItem value="over-20">Over ₹2,000</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -180,7 +183,6 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
-
           {/* Results Summary */}
           <div className="mt-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -204,7 +206,6 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
-
         {/* Loading State */}
         {isLoading && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -215,7 +216,6 @@ const Dashboard = () => {
             ))}
           </div>
         )}
-
         {/* Error State */}
         {error && (
           <div className="text-center py-12">
@@ -225,7 +225,6 @@ const Dashboard = () => {
             </div>
           </div>
         )}
-
         {/* Empty State */}
         {!isLoading && !error && filteredSweets.length === 0 && (
           <div className="text-center py-12">
@@ -246,12 +245,12 @@ const Dashboard = () => {
         {/* Sweets Grid */}
         {!isLoading && !error && filteredSweets.length > 0 && (
           <div className={
-            viewMode === 'grid' 
+            viewMode === 'grid'
               ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
               : "space-y-4"
           }>
             {filteredSweets.map((sweet, index) => (
-              <div 
+              <div
                 key={sweet.id}
                 className="animate-fade-in-up"
                 style={{ animationDelay: `${index * 0.1}s` }}
@@ -265,5 +264,4 @@ const Dashboard = () => {
     </div>
   );
 };
-
 export default Dashboard;
